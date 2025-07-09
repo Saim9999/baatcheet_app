@@ -93,7 +93,7 @@ class _MessageWidgetState extends State<MessageWidget> {
             Padding(
               padding: const EdgeInsets.only(right: 10, left: 10),
               child: Text(
-                (widget.map['time'] != null && widget.map['time'] is Timestamp)
+                (widget.map['time'] != null)
                     ? DateFormat(
                       'hh:mm a',
                     ).format((widget.map['time'] as Timestamp).toDate())
@@ -126,8 +126,14 @@ class _MessageWidgetState extends State<MessageWidget> {
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder:
-                          (_) => ShowImage(imageUrl: widget.map['message']),
+                      builder: (context) {
+                        print('SenderID: ${widget.map['sendby']}');
+                        return ShowImage(
+                          senderName: widget.map['sendby'],
+                          imageUrl: widget.map['message'],
+                        );
+                      },
+                      // (_) => ShowImage(imageUrl: widget.map['message']),
                     ),
                   ),
               child: Container(
@@ -259,6 +265,7 @@ class _MessageWidgetState extends State<MessageWidget> {
                               builder:
                                   (context) => ViewScreen(
                                     fileUrl: widget.map['message'],
+                                    senderName: widget.map['sendby'],
                                     onPageCountLoaded: (totalPages) {
                                       print(
                                         'Total pages received in the widget: $totalPages',

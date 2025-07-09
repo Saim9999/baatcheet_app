@@ -3,14 +3,16 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class ViewScreen extends StatelessWidget {
   final String fileUrl;
+  final String senderName;
 
   final Function(int)
-      onPageCountLoaded; // Callback function to pass the total number of pages
+  onPageCountLoaded; // Callback function to pass the total number of pages
 
   ViewScreen({
-    super.key,
     required this.fileUrl,
+    required this.senderName,
     required this.onPageCountLoaded,
+    super.key,
   });
 
   PdfViewerController? _pdfViewerController;
@@ -18,9 +20,7 @@ class ViewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Pdf View'),
-      ),
+      appBar: AppBar(title: Text(senderName)),
       body: SfPdfViewer.network(
         fileUrl,
         controller: _pdfViewerController,

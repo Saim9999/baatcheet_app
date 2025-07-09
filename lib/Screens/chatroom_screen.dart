@@ -7,14 +7,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
 
 class ChatRoom extends StatefulWidget {
   final Map<String, dynamic> userMap;
   final String chatRoomId;
-
   const ChatRoom({super.key, required this.chatRoomId, required this.userMap});
-
   @override
   State<ChatRoom> createState() => _ChatRoomState();
 }
@@ -25,6 +24,32 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   double downloadProgress = 0.0;
   late AnimationController _sendController;
+
+  bool isNewDate(DateTime currentMessageTime, DateTime? previousMessageTime) {
+    if (previousMessageTime == null) return true;
+    return currentMessageTime.day != previousMessageTime.day ||
+        currentMessageTime.month != previousMessageTime.month ||
+        currentMessageTime.year != previousMessageTime.year;
+  }
+
+  // Function to format the date label
+  String formatDateLabel(DateTime messageTime) {
+    final now = DateTime.now();
+    final difference = now.difference(messageTime);
+
+    if (difference.inDays == 0) {
+      return 'Today';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    }
+    if (difference.inDays > 6) {
+      // Older than 7 days ➔ show full date
+      return DateFormat('d MMMM yyyy').format(messageTime);
+    } else {
+      // Within 7 days ➔ show day name (Monday, Tuesday...)
+      return DateFormat('EEEE').format(messageTime);
+    }
+  }
 
   @override
   void initState() {
@@ -133,11 +158,54 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                             snapshot.data!.docs[index].data()
                                 as Map<String, dynamic>;
                         // return messages(size, map, context);
-                        return MessageWidget(
-                          size: size,
-                          map: map,
-                          currentUserUid: _auth.currentUser!.uid,
-                          downloadProgress: downloadProgress,
+                        DateTime messageTime =
+                            (map['time'] as Timestamp?)?.toDate() ??
+                            DateTime.now();
+                        DateTime? previousMessageTime;
+                        if (index < snapshot.data!.docs.length - 1) {
+                          Map<String, dynamic> previousMap =
+                              snapshot.data!.docs[index + 1].data()
+                                  as Map<String, dynamic>;
+                          previousMessageTime =
+                              (previousMap['time'] as Timestamp?)?.toDate();
+                        }
+                        bool showDate = isNewDate(
+                          messageTime,
+                          previousMessageTime,
+                        );
+
+                        return Column(
+                          children: [
+                            if (showDate)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 5,
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade300,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    formatDateLabel(messageTime),
+                                    style: TextStyle(
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            MessageWidget(
+                              size: size,
+                              map: map,
+                              currentUserUid: _auth.currentUser!.uid,
+                              downloadProgress: downloadProgress,
+                            ),
+                          ],
                         );
                       },
                     );
@@ -441,6 +509,16 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
             ),
           ),
         ],
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 60),
+        child: FloatingActionButton(
+          shape: CircleBorder(),
+          mini: true,
+          backgroundColor: Colors.white70,
+          child: Icon(Icons.keyboard_double_arrow_down_rounded),
+          onPressed: () {},
+        ),
       ),
     );
   }

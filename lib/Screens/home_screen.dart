@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:intl/intl.dart';
 
 import '../Authenticate/signin_screen.dart';
 import 'drawer_screen.dart';
@@ -12,7 +13,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
@@ -126,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       body:
           isLoading
               ? Center(
-                child: Container(
+                child: SizedBox(
                   height: size.height / 20,
                   width: size.height / 20,
                   child: CircularProgressIndicator(),
@@ -139,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     height: size.height / 10,
                     width: size.width,
                     alignment: Alignment.center,
-                    child: Container(
+                    child: SizedBox(
                       height: size.height / 10,
                       width: size.width / 1.15,
                       child: TextField(
@@ -307,13 +308,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       radius: 26,
                                       child: Icon(Icons.person),
                                     ),
-                            title: Text(
-                              userMap!['name'],
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            title: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  userMap!['name'],
+                                  style: TextStyle(
+                                    color: Colors.amber,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  (lastMessageData!['time'] != null &&
+                                          lastMessageData['time'] is Timestamp)
+                                      ? formatMessageTime(
+                                        (lastMessageData['time'] as Timestamp)
+                                            .toDate(),
+                                      )
+                                      : '',
+                                  style: TextStyle(
+                                    fontSize: 10.sp,
+                                    color: Color.fromARGB(255, 121, 124, 123),
+                                  ),
+                                ),
+                              ],
                             ),
                             subtitle: Text(lastMessage),
                             trailing: Icon(Icons.chat, color: Colors.black),
@@ -336,31 +355,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             child: Text('Error: ${snapshot.error}'),
                           );
                         }
-
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
                           return Center(child: CircularProgressIndicator());
                         }
-
                         final userDocs = snapshot.data!.docs;
-
                         if (userDocs.isEmpty) {
                           return Center(child: Text('No chat history!'));
                         }
-
                         return ListView.builder(
                           itemCount: userDocs.length,
                           itemBuilder: (context, index) {
                             final userMap =
                                 userDocs[index].data() as Map<String, dynamic>;
-
                             final String targetUid = userMap['userId'] ?? '';
                             final String currentUid = _auth.currentUser!.uid;
                             final String roomId = getChatRoomId(
                               currentUid,
                               targetUid,
                             );
-
                             return Column(
                               children: [
                                 ListTile(
@@ -473,5 +486,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ).push(MaterialPageRoute(builder: (_) => GroupChatHomeScreen())),
       ),
     );
+  }
+
+  String formatMessageTime(DateTime messageTime) {
+    final now = DateTime.now();
+    final difference = now.difference(messageTime);
+
+    if (difference.inMinutes < 1) {
+      return 'now';
+    } else if (difference.inDays == 0) {
+      return DateFormat('hh:mm a').format(messageTime);
+    } else if (difference.inDays < 7) {
+      return DateFormat('EEEE').format(messageTime); // e.g., Monday
+    } else {
+      return DateFormat(
+        'MMM d, yyyy',
+      ).format(messageTime); // e.g., Mar 25, 2025
+    }
   }
 }
