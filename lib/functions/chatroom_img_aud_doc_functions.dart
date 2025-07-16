@@ -89,6 +89,7 @@ class ImgAudDocChatroomFunctions {
       "message": "",
       "type": "img",
       "time": FieldValue.serverTimestamp(),
+      "isRead": false,
     });
 
     final currentUserDoc =
@@ -154,6 +155,7 @@ class ImgAudDocChatroomFunctions {
       "email": currentUserData['email'] ?? '',
       "lastMessage": imageUrl,
       "timestamp": FieldValue.serverTimestamp(),
+      "isRead": false,
     };
 
     await theirChatRef.set(theirChatData, SetOptions(merge: true));
@@ -165,6 +167,7 @@ class ImgAudDocChatroomFunctions {
       "message": imageUrl,
       "type": "img",
       "time": FieldValue.serverTimestamp(),
+      "isRead": true,
     });
 
     return imageUrl;
@@ -229,6 +232,7 @@ class ImgAudDocChatroomFunctions {
       "message": "",
       "type": "audiofile",
       "time": FieldValue.serverTimestamp(),
+      "isRead": false,
     });
 
     final currentUserDoc =
@@ -291,6 +295,7 @@ class ImgAudDocChatroomFunctions {
       "email": currentUserData['email'] ?? '',
       "lastMessage": fileUrl,
       "timestamp": FieldValue.serverTimestamp(),
+      "isRead": false,
     };
     await theirChatRef.set(theirChatData, SetOptions(merge: true));
 
@@ -300,6 +305,7 @@ class ImgAudDocChatroomFunctions {
       "message": fileUrl,
       "type": "audiofile",
       "time": FieldValue.serverTimestamp(),
+      "isRead": true,
     });
 
     print("✅ Audio file uploaded successfully.");
@@ -363,6 +369,7 @@ class ImgAudDocChatroomFunctions {
       "message": "",
       "type": "file",
       "time": FieldValue.serverTimestamp(),
+      "isRead": false,
     });
 
     final currentUserDoc =
@@ -425,6 +432,7 @@ class ImgAudDocChatroomFunctions {
       "email": currentUserData['email'] ?? '',
       "lastMessage": fileUrl,
       "timestamp": FieldValue.serverTimestamp(),
+      "isRead": false,
     };
     await theirChatRef.set(theirChatData, SetOptions(merge: true));
 
@@ -434,6 +442,7 @@ class ImgAudDocChatroomFunctions {
       "message": fileUrl,
       "type": "file",
       "time": FieldValue.serverTimestamp(),
+      "isRead": true,
     });
 
     print("✅ Document file uploaded successfully.");

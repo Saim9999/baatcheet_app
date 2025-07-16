@@ -1,6 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:baatcheet_app/Screens/show_image_screen.dart';
-import 'package:baatcheet_app/Screens/view_screen.dart';
+import 'package:baatcheet_app/functions/pdfmessage_tilescreen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -40,6 +40,16 @@ class _MessageWidgetState extends State<MessageWidget> {
     final seconds = twoDigits(duration.inSeconds.remainder(60));
 
     return [if (duration.inHours > 0) hours, minutes, seconds].join(':');
+  }
+
+  Widget _buildTickIcon(bool isMe, bool isRead) {
+    if (!isMe) return SizedBox(); // show ticks only for sender
+
+    return Icon(
+      isRead ? Icons.done_all : Icons.check,
+      size: 18,
+      color: isRead ? Colors.blue : Colors.grey,
+    );
   }
 
   @override
@@ -92,22 +102,30 @@ class _MessageWidgetState extends State<MessageWidget> {
             ),
             Padding(
               padding: const EdgeInsets.only(right: 10, left: 10),
-              child: Text(
-                (widget.map['time'] != null)
-                    ? DateFormat(
-                      'hh:mm a',
-                    ).format((widget.map['time'] as Timestamp).toDate())
-                    : '',
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  color: Color.fromARGB(255, 121, 124, 123),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (widget.map['time'] != null)
+                        ? DateFormat(
+                          'hh:mm a',
+                        ).format((widget.map['time'] as Timestamp).toDate())
+                        : '',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      color: Color.fromARGB(255, 121, 124, 123),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  _buildTickIcon(isMe, widget.map['isRead'] ?? false),
+                ],
               ),
             ),
           ],
         ),
       );
     } else if (widget.map['type'] == "img") {
+      final bool isMe = widget.map['sendbyUid'] == widget.currentUserUid;
       return Column(
         crossAxisAlignment:
             widget.map['sendbyUid'] == widget.currentUserUid
@@ -200,22 +218,30 @@ class _MessageWidgetState extends State<MessageWidget> {
                 widget.map['sendbyUid'] == widget.currentUserUid
                     ? EdgeInsets.only(right: 10)
                     : EdgeInsets.only(right: 20),
-            child: Text(
-              (widget.map['time'] != null)
-                  ? DateFormat(
-                    'hh:mm a',
-                  ).format((widget.map['time'] as Timestamp).toDate())
-                  : '',
-              style: TextStyle(
-                fontSize: 10.sp,
-                color: Color.fromARGB(255, 121, 124, 123),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  (widget.map['time'] != null)
+                      ? DateFormat(
+                        'hh:mm a',
+                      ).format((widget.map['time'] as Timestamp).toDate())
+                      : '',
+                  style: TextStyle(
+                    fontSize: 10.sp,
+                    color: Color.fromARGB(255, 121, 124, 123),
+                  ),
+                ),
+                SizedBox(width: 4),
+                _buildTickIcon(isMe, widget.map['isRead'] ?? false),
+              ],
             ),
           ),
           SizedBox(height: 10.h),
         ],
       );
     } else if (widget.map['type'] == "file") {
+      final bool isMe = widget.map['sendbyUid'] == widget.currentUserUid;
       Uri fileUri = Uri.parse(widget.map['message']);
       String fileName =
           fileUri.pathSegments.isNotEmpty
@@ -256,40 +282,10 @@ class _MessageWidgetState extends State<MessageWidget> {
               ),
               child:
                   widget.map['message'] != ""
-                      ? ListTile(
-                        horizontalTitleGap: 0.0,
-                        onTap: () async {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => ViewScreen(
-                                    fileUrl: widget.map['message'],
-                                    senderName: widget.map['sendby'],
-                                    onPageCountLoaded: (totalPages) {
-                                      print(
-                                        'Total pages received in the widget: $totalPages',
-                                      );
-                                    },
-                                  ),
-                            ),
-                          );
-                        },
-                        leading: Image.asset(
-                          'assets/images/pdf.png',
-                          height: 30.h,
-                        ),
-                        title: Text(
-                          cleanedFileName,
-                          style: TextStyle(
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.map['sendbyUid'] == widget.currentUserUid
-                                    ? Colors.white
-                                    : Colors.black,
-                          ),
-                        ),
+                      ? PdfMessageTile(
+                        map: widget.map,
+                        currentUserUid: widget.currentUserUid,
+                        cleanedFileName: cleanedFileName,
                       )
                       : Center(
                         child: Column(
@@ -318,22 +314,30 @@ class _MessageWidgetState extends State<MessageWidget> {
             ),
             Padding(
               padding: const EdgeInsets.only(right: 10),
-              child: Text(
-                (widget.map['time'] != null)
-                    ? DateFormat(
-                      'hh:mm a',
-                    ).format((widget.map['time'] as Timestamp).toDate())
-                    : '',
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  color: Color.fromARGB(255, 121, 124, 123),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (widget.map['time'] != null)
+                        ? DateFormat(
+                          'hh:mm a',
+                        ).format((widget.map['time'] as Timestamp).toDate())
+                        : '',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      color: Color.fromARGB(255, 121, 124, 123),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  _buildTickIcon(isMe, widget.map['isRead'] ?? false),
+                ],
               ),
             ),
           ],
         ),
       );
     } else if (widget.map['type'] == "audiofile") {
+      final bool isMe = widget.map['sendbyUid'] == widget.currentUserUid;
       Uri fileUri = Uri.parse(widget.map['message']);
       String fileName =
           fileUri.pathSegments.isNotEmpty
@@ -369,7 +373,6 @@ class _MessageWidgetState extends State<MessageWidget> {
         });
       }
       return Container(
-        // Widget for text messages
         alignment:
             widget.map['sendbyUid'] == widget.currentUserUid
                 ? Alignment.centerRight
@@ -378,8 +381,7 @@ class _MessageWidgetState extends State<MessageWidget> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Container(
-              // padding: EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-              margin: EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+              margin: EdgeInsets.symmetric(vertical: 5, horizontal:8),
               height: 90.h,
               decoration: BoxDecoration(
                 borderRadius:
@@ -433,7 +435,6 @@ class _MessageWidgetState extends State<MessageWidget> {
                         subtitle: Column(
                           children: [
                             Row(
-                              // mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.only(left: 15),
@@ -542,16 +543,23 @@ class _MessageWidgetState extends State<MessageWidget> {
             ),
             Padding(
               padding: const EdgeInsets.only(right: 10),
-              child: Text(
-                (widget.map['time'] != null)
-                    ? DateFormat(
-                      'hh:mm a',
-                    ).format((widget.map['time'] as Timestamp).toDate())
-                    : '',
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  color: Color.fromARGB(255, 121, 124, 123),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (widget.map['time'] != null)
+                        ? DateFormat(
+                          'hh:mm a',
+                        ).format((widget.map['time'] as Timestamp).toDate())
+                        : '',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      color: Color.fromARGB(255, 121, 124, 123),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  _buildTickIcon(isMe, widget.map['isRead'] ?? false),
+                ],
               ),
             ),
           ],

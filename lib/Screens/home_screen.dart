@@ -1,9 +1,9 @@
-import 'package:baatcheet_app/Screens/chatroom_screen.dart';
+import 'package:baatcheet_app/functions/homescreen_historylisttile.dart';
+import 'package:baatcheet_app/functions/homescreen_searchchattile.dart';
 import 'package:baatcheet_app/group_chats/group_chat_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 
 import '../Authenticate/signin_screen.dart';
@@ -51,58 +51,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  String chatRoomId(String user1, String user2) {
-    if (user1[0].toLowerCase().codeUnits[0] >
-        user2.toLowerCase().codeUnits[0]) {
-      return "$user1$user2";
-    } else {
-      return "$user2$user1";
-    }
-  }
-
   void onSearch() async {
-    FirebaseFirestore _firestore = FirebaseFirestore.instance;
+    setState(() => isLoading = true);
 
-    setState(() {
-      isLoading = true;
-    });
+    final result =
+        await _firestore
+            .collection('users')
+            .where("email", isEqualTo: _search.text)
+            .where("email", isNotEqualTo: _auth.currentUser!.email)
+            .get();
 
-    await _firestore
-        .collection('users')
-        .where("email", isEqualTo: _search.text)
-        .where("email", isNotEqualTo: FirebaseAuth.instance.currentUser!.email)
-        .get()
-        .then((value) {
-          setState(() {
-            if (value.docs.isEmpty) {
-              userMap = null;
-              showDialog(
-                context: context,
-                builder:
-                    (context) => AlertDialog(
-                      title: Text("Oops!"),
-                      content: Text("User Not Found."),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: Text("OK"),
-                        ),
-                      ],
-                    ),
-              );
-            } else {
-              userMap = value.docs[0].data();
-            }
-            isLoading = false;
-          });
-        });
+    if (result.docs.isEmpty) {
+      setState(() {
+        userMap = null;
+        isLoading = false;
+      });
+      showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: Text("Oops!"),
+              content: Text("User Not Found."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("OK"),
+                ),
+              ],
+            ),
+      );
+    } else {
+      setState(() {
+        userMap = result.docs.first.data();
+        isLoading = false;
+        print('Check UserID: ${result.docs.first.data()}');
+      });
+    }
   }
 
   Future<void> _signOut() async {
     try {
-      await FirebaseAuth.instance.signOut();
+      await _auth.signOut();
       // Navigate to the sign-in screen
       Navigator.pushReplacement(
         context,
@@ -111,6 +100,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       // Handle logout errors
       print('Logout Error: $e');
+    }
+  }
+
+  String formatMessageTime(DateTime messageTime) {
+    final now = DateTime.now();
+    final difference = now.difference(messageTime);
+
+    if (difference.inMinutes < 1) {
+      return 'now';
+    } else if (difference.inDays == 0) {
+      return DateFormat('hh:mm a').format(messageTime);
+    } else if (difference.inDays < 7) {
+      return DateFormat('EEEE').format(messageTime); // e.g., Monday
+    } else {
+      return DateFormat(
+        'MMM d, yyyy',
+      ).format(messageTime); // e.g., Mar 25, 2025
     }
   }
 
@@ -133,16 +139,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: CircularProgressIndicator(),
                 ),
               )
-              : Column(
-                children: [
-                  SizedBox(height: size.height / 20),
-                  Container(
-                    height: size.height / 10,
-                    width: size.width,
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      height: size.height / 10,
-                      width: size.width / 1.15,
+              : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    SizedBox(height: size.height / 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: TextField(
                         keyboardType: TextInputType.multiline,
                         controller: _search,
@@ -154,329 +156,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  ),
-                  SizedBox(height: size.height / 50),
-                  ElevatedButton(onPressed: onSearch, child: Text("Search")),
-                  SizedBox(height: size.height / 30),
-                  userMap != null
-                      ? StreamBuilder<QuerySnapshot>(
-                        stream:
-                            _firestore
-                                .collection('chatroom')
-                                .doc(
-                                  getChatRoomId(
-                                    _auth.currentUser!.uid,
-                                    userMap!['uid'],
-                                  ),
-                                )
-                                .collection('chats')
-                                .orderBy('time', descending: true)
-                                .limit(1)
-                                .snapshots(),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return Text('Error: ${snapshot.error}');
-                          }
+                    SizedBox(height: size.height / 50),
+                    ElevatedButton(onPressed: onSearch, child: Text("Search")),
+                    SizedBox(height: size.height / 30),
 
-                          if (!snapshot.hasData) {
-                            return Container();
-                          }
-
-                          final lastMessageData =
-                              snapshot.data!.docs.isNotEmpty
-                                  ? snapshot.data!.docs[0].data()
-                                      as Map<String, dynamic>
-                                  : null;
-                          String lastMessage = 'Hey!';
-                          if (lastMessageData != null) {
-                            if (lastMessageData['type'] == 'img') {
-                              Uri fileUri = Uri.parse(
-                                lastMessageData['message'],
-                              );
-                              String fileName =
-                                  fileUri.pathSegments.isNotEmpty
-                                      ? fileUri.pathSegments.last
-                                      : fileUri.path;
-                              String cleanedFileName = fileName.substring(
-                                fileName.indexOf('/') + 1,
-                              );
-                              lastMessage = 'Photo: $cleanedFileName';
-                            } else if (lastMessageData['type'] == 'file') {
-                              Uri fileUri = Uri.parse(
-                                lastMessageData['message'],
-                              );
-                              String fileName =
-                                  fileUri.pathSegments.isNotEmpty
-                                      ? fileUri.pathSegments.last
-                                      : fileUri.path;
-                              String cleanedFileName = fileName.substring(
-                                fileName.indexOf('/') + 1,
-                              );
-                              lastMessage = 'File: $cleanedFileName';
-                            } else if (lastMessageData['type'] == 'audiofile') {
-                              Uri fileUri = Uri.parse(
-                                lastMessageData['message'],
-                              );
-                              String fileName =
-                                  fileUri.pathSegments.isNotEmpty
-                                      ? fileUri.pathSegments.last
-                                      : fileUri.path;
-                              String cleanedFileName = fileName.substring(
-                                fileName.indexOf('/') + 1,
-                              );
-                              lastMessage = 'Audio: $cleanedFileName.mp3';
-                            } else {
-                              lastMessage = lastMessageData['message'];
-                            }
-                          }
-
-                          return ListTile(
-                            horizontalTitleGap: 10,
-                            onTap: () {
-                              String roomId = getChatRoomId(
-                                _auth.currentUser!.uid,
-                                userMap!['uid'],
-                              );
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => ChatRoom(
-                                        chatRoomId: roomId,
-                                        userMap: userMap!,
-                                      ),
-                                ),
-                              );
-                              print("object11111111 ${userMap!['uid']}");
-                            },
-                            leading:
-                                userMap!['profileImageUrl'] != ''
-                                    ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(26),
-                                      child: Image.network(
-                                        userMap!['profileImageUrl'],
-                                        height: 52,
-                                        width: 52,
-                                        fit: BoxFit.cover,
-                                        filterQuality: FilterQuality.low,
-                                        loadingBuilder: (
-                                          context,
-                                          child,
-                                          loadingProgress,
-                                        ) {
-                                          if (loadingProgress == null) {
-                                            return child;
-                                          }
-                                          return Container(
-                                            height: 52,
-                                            width: 52,
-                                            alignment: Alignment.center,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              value:
-                                                  loadingProgress
-                                                              .expectedTotalBytes !=
-                                                          null
-                                                      ? loadingProgress
-                                                              .cumulativeBytesLoaded /
-                                                          loadingProgress
-                                                              .expectedTotalBytes!
-                                                      : null,
-                                            ),
-                                          );
-                                        },
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Container(
-                                                  height: 52,
-                                                  width: 52,
-                                                  alignment: Alignment.center,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey[300],
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          26,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.error,
-                                                    color: Colors.red,
-                                                  ),
-                                                ),
-                                      ),
-                                    )
-                                    : CircleAvatar(
-                                      radius: 26,
-                                      child: Icon(Icons.person),
-                                    ),
-                            title: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  userMap!['name'],
-                                  style: TextStyle(
-                                    color: Colors.amber,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  (lastMessageData!['time'] != null &&
-                                          lastMessageData['time'] is Timestamp)
-                                      ? formatMessageTime(
-                                        (lastMessageData['time'] as Timestamp)
-                                            .toDate(),
-                                      )
-                                      : '',
-                                  style: TextStyle(
-                                    fontSize: 10.sp,
-                                    color: Color.fromARGB(255, 121, 124, 123),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Text(lastMessage),
-                            trailing: Icon(Icons.chat, color: Colors.black),
-                          );
-                        },
-                      )
-                      : Container(),
-
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream:
-                          _firestore
-                              .collection('chathistory')
-                              .doc(_auth.currentUser!.uid)
-                              .collection('chats')
-                              .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Text('Error: ${snapshot.error}'),
-                          );
-                        }
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Center(child: CircularProgressIndicator());
-                        }
-                        final userDocs = snapshot.data!.docs;
-                        if (userDocs.isEmpty) {
-                          return Center(child: Text('No chat history!'));
-                        }
-                        return ListView.builder(
-                          itemCount: userDocs.length,
-                          itemBuilder: (context, index) {
-                            final userMap =
-                                userDocs[index].data() as Map<String, dynamic>;
-                            final String targetUid = userMap['userId'] ?? '';
-                            final String currentUid = _auth.currentUser!.uid;
-                            final String roomId = getChatRoomId(
-                              currentUid,
-                              targetUid,
-                            );
-                            return Column(
-                              children: [
-                                ListTile(
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder:
-                                            (_) => ChatRoom(
-                                              chatRoomId: roomId,
-                                              userMap: userMap,
-                                            ),
-                                      ),
-                                    );
-                                  },
-                                  leading:
-                                      userMap['profileImageUrl'] != null &&
-                                              userMap['profileImageUrl']
-                                                  .toString()
-                                                  .isNotEmpty
-                                          ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              26,
-                                            ),
-                                            child: Image.network(
-                                              userMap['profileImageUrl'],
-                                              height: 52,
-                                              width: 52,
-                                              fit: BoxFit.cover,
-                                              filterQuality: FilterQuality.low,
-                                              loadingBuilder: (
-                                                context,
-                                                child,
-                                                loadingProgress,
-                                              ) {
-                                                if (loadingProgress == null) {
-                                                  return child;
-                                                }
-                                                return Container(
-                                                  height: 52,
-                                                  width: 52,
-                                                  alignment: Alignment.center,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    value:
-                                                        loadingProgress
-                                                                    .expectedTotalBytes !=
-                                                                null
-                                                            ? loadingProgress
-                                                                    .cumulativeBytesLoaded /
-                                                                loadingProgress
-                                                                    .expectedTotalBytes!
-                                                            : null,
-                                                  ),
-                                                );
-                                              },
-                                              errorBuilder:
-                                                  (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) => Container(
-                                                    height: 52,
-                                                    width: 52,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.grey[300],
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            26,
-                                                          ),
-                                                    ),
-                                                    child: Icon(
-                                                      Icons.error,
-                                                      color: Colors.red,
-                                                    ),
-                                                  ),
-                                            ),
-                                          )
-                                          : CircleAvatar(
-                                            radius: 26,
-                                            child: Icon(Icons.person),
-                                          ),
-                                  title: Text(
-                                    userMap['name'] ?? '',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    userMap['email'] ?? '',
-                                    style: TextStyle(color: Colors.grey[600]),
-                                  ),
-                                ),
-                                SizedBox(height: 10.h),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                    // Search Chat List Tile,
+                    SearchChatTile(userMap: userMap),
+                    Divider(),
+                    // Chat History List Tile,
+                    ChatHistoryListTile(),
+                  ],
+                ),
               ),
       floatingActionButton: FloatingActionButton(
         child: Icon(Icons.group),
@@ -486,22 +176,5 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ).push(MaterialPageRoute(builder: (_) => GroupChatHomeScreen())),
       ),
     );
-  }
-
-  String formatMessageTime(DateTime messageTime) {
-    final now = DateTime.now();
-    final difference = now.difference(messageTime);
-
-    if (difference.inMinutes < 1) {
-      return 'now';
-    } else if (difference.inDays == 0) {
-      return DateFormat('hh:mm a').format(messageTime);
-    } else if (difference.inDays < 7) {
-      return DateFormat('EEEE').format(messageTime); // e.g., Monday
-    } else {
-      return DateFormat(
-        'MMM d, yyyy',
-      ).format(messageTime); // e.g., Mar 25, 2025
-    }
   }
 }

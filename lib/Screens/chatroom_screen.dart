@@ -25,6 +25,10 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
   double downloadProgress = 0.0;
   late AnimationController _sendController;
 
+  String getChatRoomId(String uid1, String uid2) {
+    return uid1.hashCode <= uid2.hashCode ? '${uid1}_$uid2' : '${uid2}_$uid1';
+  }
+
   bool isNewDate(DateTime currentMessageTime, DateTime? previousMessageTime) {
     if (previousMessageTime == null) return true;
     return currentMessageTime.day != previousMessageTime.day ||
@@ -51,10 +55,27 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
     }
   }
 
+  void markMessagesAsRead(String chatRoomId) async {
+    final currentUser = FirebaseAuth.instance.currentUser!;
+    final query =
+        await FirebaseFirestore.instance
+            .collection('chatroom')
+            .doc(chatRoomId)
+            .collection('chats')
+            .where('sendbyUid', isNotEqualTo: currentUser.uid)
+            .where('isRead', isEqualTo: false)
+            .get();
+
+    for (var doc in query.docs) {
+      doc.reference.update({'isRead': true});
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
-
+    markMessagesAsRead(widget.chatRoomId);
     _sendController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),

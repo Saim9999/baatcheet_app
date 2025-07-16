@@ -9,10 +9,10 @@ class ViewScreen extends StatelessWidget {
   onPageCountLoaded; // Callback function to pass the total number of pages
 
   ViewScreen({
+    super.key,
     required this.fileUrl,
     required this.senderName,
     required this.onPageCountLoaded,
-    super.key,
   });
 
   PdfViewerController? _pdfViewerController;
@@ -27,7 +27,6 @@ class ViewScreen extends StatelessWidget {
         onDocumentLoaded: (details) async {
           int totalPages = details.document.pages.count;
           print('Total pages in the PDF: $totalPages');
-
           onPageCountLoaded(totalPages);
         },
       ),

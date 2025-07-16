@@ -44,6 +44,7 @@ class MsgChatroomFunctions {
       "message": messageText.trim(),
       "type": "text",
       "time": FieldValue.serverTimestamp(),
+      "isRead": false,
     };
 
     messageController.clear();
