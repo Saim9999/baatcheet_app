@@ -1,14 +1,16 @@
 import 'package:baatcheet_app/functions/chatroom_img_aud_doc_functions.dart';
 import 'package:baatcheet_app/functions/chatroom_message_widget.dart';
 import 'package:baatcheet_app/functions/chatroom_msg_function.dart';
+import 'package:baatcheet_app/functions/voice_note_function.dart';
+import 'package:baatcheet_app/helper/constant.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:lottie/lottie.dart';
 
 class ChatRoom extends StatefulWidget {
   final Map<String, dynamic> userMap;
@@ -25,6 +27,8 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
   double downloadProgress = 0.0;
   late AnimationController _sendController;
 
+  bool showSendButton = false;
+
   String getChatRoomId(String uid1, String uid2) {
     return uid1.hashCode <= uid2.hashCode ? '${uid1}_$uid2' : '${uid2}_$uid1';
   }
@@ -39,14 +43,22 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
   // Function to format the date label
   String formatDateLabel(DateTime messageTime) {
     final now = DateTime.now();
-    final difference = now.difference(messageTime);
 
-    if (difference.inDays == 0) {
+    // Get just the date parts for accurate calendar day comparison
+    final nowDate = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(
+      messageTime.year,
+      messageTime.month,
+      messageTime.day,
+    );
+    final difference = nowDate.difference(messageDate).inDays;
+
+    if (difference == 0) {
       return 'Today';
-    } else if (difference.inDays == 1) {
+    } else if (difference == 1) {
       return 'Yesterday';
     }
-    if (difference.inDays > 6) {
+    if (difference > 6) {
       // Older than 7 days ➔ show full date
       return DateFormat('d MMMM yyyy').format(messageTime);
     } else {
@@ -71,16 +83,24 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
     }
   }
 
+  late VoiceNoteHelper _voiceNoteHelper;
+  bool isRecording = false;
+  String? audioPath;
 
   @override
   void initState() {
     super.initState();
+    _message.addListener(() {
+      setState(() {
+        showSendButton = _message.text.trim().isNotEmpty;
+      });
+    });
+    _voiceNoteHelper = VoiceNoteHelper(chatRoomId: widget.chatRoomId);
     markMessagesAsRead(widget.chatRoomId);
     _sendController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
     );
-
     // Add this to automatically start the animation after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _sendController.reset();
@@ -90,6 +110,7 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _voiceNoteHelper.dispose();
     _sendController.dispose();
     super.dispose();
   }
@@ -98,17 +119,22 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.amber,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         toolbarHeight: 80.h,
-        automaticallyImplyLeading: false,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        forceMaterialTransparency: true,
+        systemOverlayStyle: SystemUiOverlayStyle(),
+        titleSpacing: 10.0,
         leading: IconButton(
           onPressed: () {
             Get.back();
           },
-          icon: Image.asset('assets/images/Back (1).png'),
+          icon: Icon(Icons.keyboard_backspace_rounded),
+        ),
+        shape: Border(
+          bottom: BorderSide(color: Color.fromARGB(255, 238, 250, 248)),
         ),
         title: StreamBuilder<DocumentSnapshot>(
           stream:
@@ -122,8 +148,9 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
               return Row(
                 children: [
                   Container(
-                    height: 52.h,
-                    width: 52.h,
+                    alignment: Alignment.bottomRight,
+                    height: 44.h,
+                    width: 44.h,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(52.r),
                       image: DecorationImage(
@@ -131,17 +158,26 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                         fit: BoxFit.cover,
                       ),
                     ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 3, bottom: 5),
+                      child: CircleAvatar(
+                        radius: 4.r,
+                        backgroundColor:
+                            snapshot.data!['status'] == "Online"
+                                ? Color.fromARGB(255, 43, 239, 131)
+                                : Color.fromARGB(255, 121, 124, 123),
+                      ),
+                    ),
                   ),
                   SizedBox(width: 10.w),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(widget.userMap['name'], style: appbartitleText),
                       Text(
-                        widget.userMap['name'],
-                        style: TextStyle(color: Colors.black),
-                      ),
-                      Text(
-                        snapshot.data!['status'],
+                        snapshot.data!['status'] == "Online"
+                            ? 'Active now'
+                            : 'Offline',
                         style: TextStyle(fontSize: 14, color: Colors.black54),
                       ),
                     ],
@@ -194,7 +230,6 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                           messageTime,
                           previousMessageTime,
                         );
-
                         return Column(
                           children: [
                             if (showDate)
@@ -208,14 +243,16 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                                     horizontal: 10,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade300,
+                                    color: Color.fromARGB(255, 248, 251, 250),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
                                     formatDateLabel(messageTime),
                                     style: TextStyle(
-                                      color: Colors.black87,
+                                      color: Color.fromARGB(255, 0, 14, 8),
                                       fontWeight: FontWeight.w500,
+                                      fontSize: 12.sp,
+                                      fontFamily: 'cretype  Caros-Medium',
                                     ),
                                   ),
                                 ),
@@ -241,6 +278,11 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
             height: size.height / 10,
             width: size.width,
             alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: Color.fromARGB(255, 238, 250, 248)),
+              ),
+            ),
             child: SizedBox(
               height: size.height / 12,
               width: size.width / 1.0,
@@ -249,228 +291,186 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                 children: [
                   IconButton(
                     onPressed: () {
-                      Get.dialog(
-                        AlertDialog(
-                          backgroundColor: Colors.transparent,
-                          elevation: 0.0,
-                          content: Container(
-                            height: 300.h,
-                            alignment: Alignment.center,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.amber,
-                                          CupertinoIcons.doc,
-                                          () {
-                                            // _pickDocument();
-                                            ImgAudDocChatroomFunctions.pickDocFile(
-                                              onDocPicked: (file) async {
-                                                await ImgAudDocChatroomFunctions.uploadDocFileWithProgress(
-                                                  chatRoomId: widget.chatRoomId,
-                                                  docFile: file,
-                                                  userMap: widget.userMap,
-                                                  onProgress: (progress) {
-                                                    setState(() {
-                                                      downloadProgress =
-                                                          progress;
-                                                    });
-                                                  },
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Document',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.deepOrange,
-                                          CupertinoIcons.camera,
-                                          () {
-                                            // getCameraImage();
-                                            ImgAudDocChatroomFunctions.getCameraImage((
-                                              pickedFile,
-                                            ) async {
-                                              await ImgAudDocChatroomFunctions.uploadImage(
-                                                imageFile: pickedFile,
-                                                userMap: widget.userMap,
-                                                onProgress: (progress) {
-                                                  setState(() {
-                                                    downloadProgress = progress;
-                                                  });
-                                                },
-                                              );
-                                            });
-                                          },
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Camera',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.deepPurple,
-                                          CupertinoIcons.photo_fill,
-                                          () {
-                                            // getImage();
-                                            ImgAudDocChatroomFunctions.getImage((
-                                              pickedFile,
-                                            ) async {
-                                              await ImgAudDocChatroomFunctions.uploadImage(
-                                                imageFile: pickedFile,
-                                                userMap: widget.userMap,
-                                                onProgress: (progress) {
-                                                  setState(() {
-                                                    downloadProgress = progress;
-                                                  });
-                                                },
-                                              );
-                                            });
-                                          },
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Gallery',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.cyan,
-                                          CupertinoIcons.headphones,
-                                          () async {
-                                            // _pickAudioFile();
-                                            ImgAudDocChatroomFunctions.pickAudioFile(
-                                              onAudioPicked: (file) async {
-                                                await ImgAudDocChatroomFunctions.uploadAudioFileWithProgress(
-                                                  chatRoomId: widget.chatRoomId,
-                                                  audioFile: file,
-                                                  userMap: widget.userMap,
-                                                  onProgress: (progress) {
-                                                    setState(() {
-                                                      downloadProgress =
-                                                          progress;
-                                                    });
-                                                  },
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Audio',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.brown,
-                                          CupertinoIcons.location_solid,
-                                          () {},
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Location',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.pinkAccent,
-                                          CupertinoIcons.person,
-                                          () {},
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Contact',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Column(
-                                      children: [
-                                        containerWidget(
-                                          Colors.purple,
-                                          CupertinoIcons.chart_bar_alt_fill,
-                                          () {},
-                                        ),
-                                        SizedBox(height: 5.h),
-                                        Text(
-                                          'Poll',
-                                          style: TextStyle(
-                                            fontSize: 13.sp,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ],
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return Dialog(
+                            backgroundColor: Color.fromARGB(255, 255, 255, 255),
+                            alignment: Alignment.bottomCenter,
+                            insetPadding: EdgeInsets.all(0),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(30),
+                                topRight: Radius.circular(30),
+                              ),
                             ),
-                          ),
-                        ),
+                            child: SizedBox(
+                              height: size.height / 1.4,
+                              width: size.width,
+                              child: ListView(
+                                children: [
+                                  ListTile(
+                                    leading: IconButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                      icon: Icon(Icons.close_rounded),
+                                    ),
+                                    title: Text(
+                                      'Share Content',
+                                      style: TextStyle(
+                                        fontFamily: 'cretype  Caros-Medium',
+                                        fontSize: 16.sp,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    minTileHeight: 80,
+                                    horizontalTitleGap: 60,
+                                  ),
+                                  listTileMethod(
+                                    context,
+                                    "Camera",
+                                    "",
+                                    'assets/images/camera image.png',
+                                    () {
+                                      Navigator.of(context).pop();
+                                      // getCameraImage();
+                                      ImgAudDocChatroomFunctions.getCameraImage((
+                                        pickedFile,
+                                      ) async {
+                                        await ImgAudDocChatroomFunctions.uploadImage(
+                                          imageFile: pickedFile,
+                                          userMap: widget.userMap,
+                                          onProgress: (progress) {
+                                            setState(() {
+                                              downloadProgress = progress;
+                                            });
+                                          },
+                                        );
+                                      });
+                                    },
+                                  ),
+                                  Divider(endIndent: 20, indent: 20),
+                                  listTileMethod(
+                                    context,
+                                    "Documents",
+                                    "Share your files",
+                                    'assets/images/doc.png',
+                                    () {
+                                      ImgAudDocChatroomFunctions.pickDocFile(
+                                        onDocPicked: (file) async {
+                                          await ImgAudDocChatroomFunctions.uploadDocFileWithProgress(
+                                            chatRoomId: widget.chatRoomId,
+                                            docFile: file,
+                                            userMap: widget.userMap,
+                                            onProgress: (progress) {
+                                              setState(() {
+                                                downloadProgress = progress;
+                                              });
+                                            },
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                  Divider(endIndent: 20, indent: 20),
+                                  listTileMethod(
+                                    context,
+                                    "Media",
+                                    "Share photos from gallery",
+                                    'assets/images/media.png',
+                                    () {
+                                      ImgAudDocChatroomFunctions.getImage((
+                                        pickedFile,
+                                      ) async {
+                                        await ImgAudDocChatroomFunctions.uploadImage(
+                                          imageFile: pickedFile,
+                                          userMap: widget.userMap,
+                                          onProgress: (progress) {
+                                            setState(() {
+                                              downloadProgress = progress;
+                                            });
+                                          },
+                                        );
+                                      });
+                                    },
+                                  ),
+                                  Divider(endIndent: 20, indent: 20),
+                                  listTileMethod(
+                                    context,
+                                    "Audio",
+                                    "Share your audio files",
+                                    Icons.headphones_rounded,
+                                    () {
+                                      ImgAudDocChatroomFunctions.pickAudioFile(
+                                        onAudioPicked: (file) async {
+                                          await ImgAudDocChatroomFunctions.uploadAudioFileWithProgress(
+                                            chatRoomId: widget.chatRoomId,
+                                            audioFile: file,
+                                            userMap: widget.userMap,
+                                            onProgress: (progress) {
+                                              setState(() {
+                                                downloadProgress = progress;
+                                              });
+                                            },
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                  Divider(endIndent: 20, indent: 20),
+                                  listTileMethod(
+                                    context,
+                                    "Video",
+                                    "",
+                                    Icons.video_file_rounded,
+                                    () {
+                                      MsgChatroomFunctions.pickVideo((
+                                        pickedFile,
+                                      ) async {
+                                        await MsgChatroomFunctions.uploadVideo(
+                                          videoFile: pickedFile,
+                                          userMap: widget.userMap,
+                                          onProgress: (progress) {
+                                            setState(() {
+                                              downloadProgress = progress;
+                                            });
+                                          },
+                                        );
+                                      });
+                                      // ImgAudDocChatroomFunctions.getImage((
+                                      //   pickedFile,
+                                      // ) async {
+                                      //   await ImgAudDocChatroomFunctions.uploadImage(
+                                      //     imageFile: pickedFile,
+                                      //     userMap: widget.userMap,
+                                      //     onProgress: (progress) {
+                                      //       setState(() {
+                                      //         downloadProgress = progress;
+                                      //       });
+                                      //     },
+                                      //   );
+                                      // });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
-                    icon: Image.asset('assets/images/file path.png'),
+                    icon: Image.asset(
+                      'assets/images/file path.png',
+                      height: 24.h,
+                      width: 24.w,
+                      color: Color.fromARGB(255, 0, 14, 8),
+                    ),
                   ),
                   Container(
                     padding: EdgeInsets.only(left: 10),
-                    height: size.height / 10,
-                    width: size.width / 1.6,
+                    height: size.height / 17,
+                    width: size.width / 1.7,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Color.fromARGB(255, 243, 246, 246),
@@ -482,48 +482,88 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
                       maxLines: null,
                       controller: _message,
                       decoration: InputDecoration(
-                        suffixIcon: IconButton(
-                          // onPressed: () => getCameraImage(),
-                          onPressed:
-                              () => ImgAudDocChatroomFunctions.getCameraImage((
-                                pickedFile,
-                              ) async {
-                                await ImgAudDocChatroomFunctions.uploadImage(
-                                  imageFile: pickedFile,
-                                  userMap: widget.userMap,
-                                  onProgress: (progress) {
-                                    setState(() {
-                                      downloadProgress = progress;
-                                    });
-                                  },
-                                );
-                              }),
-                          // icon: Image.asset('assets/images/camera image.png'),
-                          icon: Icon(Icons.camera_alt_outlined),
-                        ),
                         hintText: "Write your message",
                         border: InputBorder.none,
+                        hintStyle: TextStyle(
+                          color: Color.fromARGB(255, 121, 124, 123),
+                        ),
                       ),
                       cursorColor: Color.fromARGB(255, 32, 160, 145),
                     ),
                   ),
-                  IconButton(
-                    splashRadius: 50,
-                    iconSize: 50,
-                    onPressed: () {
-                      _sendController.reset();
-                      _sendController.forward();
-                      // onSendMessage();
-                      MsgChatroomFunctions.sendTextMessage(
-                        messageText: _message.text.trim(),
-                        userMap: widget.userMap,
-                        messageController: _message,
-                      );
-                    },
-                    icon: Lottie.asset(
-                      'assets/animations/send_animation.json',
-                      controller: _sendController,
-                    ),
+                  Row(
+                    children: [
+                      if (showSendButton)
+                        IconButton(
+                          onPressed: () {
+                            _sendController.reset();
+                            _sendController.forward();
+                            MsgChatroomFunctions.sendTextMessage(
+                              messageText: _message.text.trim(),
+                              userMap: widget.userMap,
+                              messageController: _message,
+                            );
+                          },
+                          icon: Image.asset(
+                            'assets/images/send message.png',
+                            height: 40.h,
+                            width: 40.w,
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed:
+                                  () => ImgAudDocChatroomFunctions.getCameraImage((
+                                    pickedFile,
+                                  ) async {
+                                    await ImgAudDocChatroomFunctions.uploadImage(
+                                      imageFile: pickedFile,
+                                      userMap: widget.userMap,
+                                      onProgress: (progress) {
+                                        setState(() {
+                                          downloadProgress = progress;
+                                        });
+                                      },
+                                    );
+                                  }),
+                              icon: Icon(
+                                Icons.camera_alt_outlined,
+                                color: Color.fromARGB(255, 0, 14, 8),
+                              ),
+                              iconSize: 30,
+                            ),
+                            IconButton(
+                              iconSize: 30,
+                              icon: Icon(
+                                isRecording
+                                    ? Icons.stop
+                                    : Icons.mic_none_rounded,
+                              ),
+                              onPressed: () async {
+                                await _voiceNoteHelper.toggleRecording(
+                                  onRecordingChanged: (recording, path) {
+                                    setState(() {
+                                      isRecording = recording;
+                                      audioPath = path;
+                                    });
+                                  },
+                                  userMap: widget.userMap,
+                                  chatRoomId: widget.chatRoomId,
+                                  onProgress: (progress) {
+                                    downloadProgress = progress;
+                                  },
+                                );
+                              },
+                              color:
+                                  isRecording
+                                      ? Colors.red
+                                      : Color.fromARGB(255, 0, 14, 8),
+                            ),
+                          ],
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -531,35 +571,63 @@ class _ChatRoomState extends State<ChatRoom> with TickerProviderStateMixin {
           ),
         ],
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 60),
-        child: FloatingActionButton(
-          shape: CircleBorder(),
-          mini: true,
-          backgroundColor: Colors.white70,
-          child: Icon(Icons.keyboard_double_arrow_down_rounded),
-          onPressed: () {},
-        ),
-      ),
+      // floatingActionButton: Padding(
+      //   padding: const EdgeInsets.only(bottom: 60),
+      //   child: FloatingActionButton(
+      //     shape: CircleBorder(),
+      //     mini: true,
+      //     backgroundColor: Colors.white70,
+      //     child: Icon(Icons.keyboard_double_arrow_down_rounded),
+      //     onPressed: () {},
+      //   ),
+      // ),
     );
   }
 
-  Container containerWidget(
-    Color color,
-    IconData cupertinoIcons,
+  ListTile listTileMethod(
+    BuildContext context,
+    String title,
+    String subtitle,
+    // String image,
+    // IconData icon,
+    dynamic imageOrIcon,
     void Function() onPressed,
   ) {
-    return Container(
-      height: 60.h,
-      width: 60.h,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(60),
+    return ListTile(
+      contentPadding: EdgeInsets.all(10),
+      horizontalTitleGap: 0,
+      leading: CircleAvatar(
+        radius: 44.r,
+        backgroundColor: Color.fromARGB(255, 242, 248, 247),
+        child:
+            imageOrIcon is String
+                ? Image.asset(
+                  imageOrIcon,
+                  height: 18.h,
+                  width: 20.w,
+                  color: Color.fromARGB(255, 121, 124, 123),
+                )
+                : Icon(
+                  imageOrIcon as IconData,
+                  size: 20.w,
+                  color: Color.fromARGB(255, 121, 124, 123),
+                ),
       ),
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(cupertinoIcons, color: Colors.white, size: 30),
+      title: Text(title),
+      titleTextStyle: TextStyle(
+        fontFamily: 'cretype  Caros-Bold',
+        color: Colors.black,
+        fontSize: 14.sp,
+        fontWeight: FontWeight.bold,
       ),
+      subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+      subtitleTextStyle: TextStyle(
+        fontFamily: 'CircularStd-Book',
+        color: Color.fromARGB(255, 121, 124, 123),
+        fontSize: 12.sp,
+        fontWeight: FontWeight.w500,
+      ),
+      onTap: onPressed,
     );
   }
 }

@@ -114,11 +114,30 @@ class _SearchChatTileState extends State<SearchChatTile> {
                 fileName.indexOf('/') + 1,
               );
               lastMessage = 'Audio: $cleanedFileName.mp3';
+            } else if (lastMessageData['type'] == 'voice') {
+              Uri fileUri = Uri.parse(lastMessageData['message']);
+              String fileName =
+                  fileUri.pathSegments.isNotEmpty
+                      ? fileUri.pathSegments.last
+                      : fileUri.path;
+              String cleanedFileName = fileName.substring(
+                fileName.indexOf('/') + 1,
+              );
+              lastMessage = 'Voice: $cleanedFileName';
+            } else if (lastMessageData['type'] == 'video') {
+              Uri fileUri = Uri.parse(lastMessageData['message']);
+              String fileName =
+                  fileUri.pathSegments.isNotEmpty
+                      ? fileUri.pathSegments.last
+                      : fileUri.path;
+              String cleanedFileName = fileName.substring(
+                fileName.indexOf('/') + 1,
+              );
+              lastMessage = 'Video: $cleanedFileName';
             } else {
               lastMessage = lastMessageData['message'];
             }
           }
-
           return ListTile(
             horizontalTitleGap: 10,
             onTap: () {

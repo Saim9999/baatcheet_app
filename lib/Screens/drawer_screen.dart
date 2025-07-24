@@ -11,16 +11,15 @@ class DrawerScreen extends StatelessWidget {
     return Scaffold(
       body: Column(
         children: [
-          SizedBox(
-            height: 30.h,
-          ),
+          SizedBox(height: 30.h),
           ListTile(
             leading: Icon(Icons.recent_actors),
             title: Text('Recent Chat History'),
             onTap: () {
-              Get.to(ChatListScreen()); 
+              Get.to(ChatListScreen());
             },
-          )
+          ),
+          
         ],
       ),
     );
